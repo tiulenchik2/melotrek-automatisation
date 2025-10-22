@@ -197,9 +197,6 @@ async def process_complete_album(chat_id: int, group_id: str, state: FSMContext)
             file = await bot.get_file(file_id)
             file_extension = splitext(file.file_path)[1]
             await bot.download_file(file.file_path, f"photos/{dir_cap}/{i}{file_extension}")
-
-            # РОБОТА З ВІДОСОМ ТУТ.
-            # ЧИ ФУНКЦІЯ, ЧИ ЩО ТУТ В ТЕБЕ БЛЯТЬ.
     else:
         await bot.send_message(
             chat_id, 
