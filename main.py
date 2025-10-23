@@ -210,10 +210,12 @@ async def process_complete_album(chat_id: int, group_id: str, state: FSMContext)
             file_id = message_part.photo[-1].file_id
             file = await bot.get_file(file_id)
             file_extension = splitext(file.file_path)[1]
-            await bot.download_file(file.file_path, f"photos/{dir_cap}/{i}{file_extension}")
-
-            # РОБОТА З ВІДОСОМ ТУТ.
-            # ЧИ ФУНКЦІЯ, ЧИ ЩО ТУТ В ТЕБЕ БЛЯТЬ.
+            await bot.download_file(file.file_path, f"photos/{dir_cap}/{i+1}{file_extension}")
+            if len(listdir(f"photos/{dir_cap}")) == 8:
+                await bot.send_message(chat_id, text="Фотографії завантажено! Оберіть іншу категорію.", reply_markup=
+                                       ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in chunk] for chunk in chunks]))
+                await state.update_data(caps_list=caps)
+                await state.set_state(Init.choose_cap_for_photo)
     else:
         await bot.send_message(
             chat_id, 
