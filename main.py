@@ -32,6 +32,10 @@ class Init(StatesGroup):
     show_names = State()
     choose_cap_for_photo = State()
     send_photos = State()
+# for caps_kb
+def chunk_list(input_list, chunk_size):
+    for i in range(0, len(input_list), chunk_size):
+        yield input_list[i:i + chunk_size]
 
 async def init_db():
     try:
@@ -118,7 +122,8 @@ async def get_names_command(message: Message, state: FSMContext):
     if caps == None:
         await message.reply("Пусто! Можливо, потрібно ініціалізувати таблицю! /init_table")
         return
-    caps_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in caps]])
+    chunks = list(chunk_list(caps, 2))
+    caps_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in chunk] for chunk in chunks])
     await message.reply("Оберіть категорію.", reply_markup=caps_kb)
     await state.set_state(Init.show_names)
 
@@ -128,7 +133,6 @@ async def show_names_text(message: Message, state: FSMContext):
     cap_show = (await state.get_data())["cap"]
     try:
         names = await get_names_in_single_list(cap_show)
-        print(names)
         message_names = "\n".join(names)
         await message.reply(message_names)
     except Exception as e:
@@ -155,33 +159,43 @@ async def start_sending_nudes(message: Message, state: FSMContext):
     if caps == None:
         await message.reply("Пусто! Можливо, потрібно ініціалізувати таблицю! /init_table")
         return
-    caps_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in caps]])
+    await state.update_data(caps_list=caps)
+    chunks = list(chunk_list(caps, 2))
+    caps_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in chunk] for chunk in chunks])
     await message.reply("Оберіть категорію, для якої потрібно зробити фоточки.", reply_markup=caps_kb)
 
 async def is_valid_category(message: Message) -> bool:
-    """Перевіряє, чи текст повідомлення є дійсним заголовком категорії."""
     caps = await get_caps_in_single_list() 
-    
     return message.text in caps
 
 @dp.message(Init.choose_cap_for_photo, is_valid_category)
 async def continue_sending(message: Message, state: FSMContext):
     await state.update_data(cap=message.text)
-    cap_photo = (await state.get_data())["cap"]
+    state_data = await state.get_data()
+    cap_photo = state_data["cap"]
+    caps = state_data["caps_list"]
     dir_cap = str(cap_photo).replace(" ", "_")
     if isdir(f"photos/{dir_cap}") and listdir(f"photos/{dir_cap}"):
-        await message.reply("Для цієї категорії вже є фотки.")
+        caps[caps.index(cap_photo)] = f"{cap_photo}✅"
+        chunks = list(chunk_list(caps, 2))
+        caps_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in chunk] for chunk in chunks])
+        await state.update_data(caps_list=caps)
+        await message.reply("Для цієї категорії вже є фотки.", reply_markup=caps_kb)
         return
     if not isdir(f"photos/{dir_cap}"): mkdir(f"photos/{dir_cap}")
     names = await get_names_in_single_list(cap_photo)
     message_names = "\n".join(names)
     await state.update_data(expected_count=len(names))
-    await message.reply(f"Обрано категорію {cap_photo}.\nНадішліть {len(names)} обкладинок у такому порядку:\n {message_names}")
+    await message.reply(f"Обрано категорію {cap_photo}.\nНадішліть {len(names)} обкладинок у такому порядку:\n {message_names}", reply_markup=ReplyKeyboardRemove())
     await state.update_data(dir_cap=dir_cap)
     await state.set_state(Init.send_photos)
 
 async def process_complete_album(chat_id: int, group_id: str, state: FSMContext):
     state_data = await state.get_data()
+    cap_photo = state_data["cap"]
+    caps = state_data["caps_list"]
+    caps[caps.index(cap_photo)] = f"{cap_photo}✅"
+    chunks = list(chunk_list(caps, 2))
     cache_key = (chat_id, group_id)
     dir_cap = state_data["dir_cap"]
     album: List[Message] = album_cache.pop(cache_key) 
@@ -196,10 +210,12 @@ async def process_complete_album(chat_id: int, group_id: str, state: FSMContext)
             file_id = message_part.photo[-1].file_id
             file = await bot.get_file(file_id)
             file_extension = splitext(file.file_path)[1]
-            await bot.download_file(file.file_path, f"photos/{dir_cap}/{i}{file_extension}")
-
-            # РОБОТА З ВІДОСОМ ТУТ.
-            # ЧИ ФУНКЦІЯ, ЧИ ЩО ТУТ В ТЕБЕ БЛЯТЬ.
+            await bot.download_file(file.file_path, f"photos/{dir_cap}/{i+1}{file_extension}")
+            if len(listdir(f"photos/{dir_cap}")) == 8:
+                await bot.send_message(chat_id, text="Фотографії завантажено! Оберіть іншу категорію.", reply_markup=
+                                       ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in chunk] for chunk in chunks]))
+                await state.update_data(caps_list=caps)
+                await state.set_state(Init.choose_cap_for_photo)
     else:
         await bot.send_message(
             chat_id, 
