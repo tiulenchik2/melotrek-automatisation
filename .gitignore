@@ -1,7 +1,7 @@
-.json
-.env
-venv
-.plantuml
-out
-.db
-/
+*.json
+*.env
+venv/
+*.plantuml
+out/
+*.db
+*.txt
